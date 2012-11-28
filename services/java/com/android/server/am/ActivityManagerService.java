@@ -32,6 +32,7 @@ import com.android.server.Watchdog;
 import com.android.server.am.ActivityStack.ActivityState;
 import com.android.server.pm.UserManagerService;
 import com.android.server.wm.WindowManagerService;
+import com.android.server.am.ActivityManagerConfig;
 
 import dalvik.system.Zygote;
 
@@ -316,6 +317,8 @@ public final class ActivityManagerService extends ActivityManagerNative
         }
         return null;
     }
+
+	ActivityManagerConfig mActivityManagerConfig = new ActivityManagerConfig();
 
     /**
      * Activity we have told the window manager to have key focus.
@@ -13517,6 +13520,17 @@ public final class ActivityManagerService extends ActivityManagerNative
 
             app.setRawAdj = app.curRawAdj;
         }
+
+		// Check if we should keep this app running and don't modify the oom_adj
+		int maxOomAdjProc = mActivityManagerConfig.getMaxOomAdj(app.processName);
+		if (ActivityManagerConfig.NO_MAX_OOM_ADJ != maxOomAdjProc) {
+			if (app.curAdj > maxOomAdjProc) {
+				if (DEBUG_SWITCH || DEBUG_OOM_ADJ)
+					Slog.w(TAG, "Not setting oom_adj higher than " + maxOomAdjProc + 
+						   " for " + app.processName);
+				app.curAdj = maxOomAdjProc;
+			}
+		}
 
         if (app.curAdj != app.setAdj) {
             if (Process.setOomAdj(app.pid, app.curAdj)) {
