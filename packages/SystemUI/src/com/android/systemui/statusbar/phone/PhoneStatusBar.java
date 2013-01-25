@@ -95,6 +95,7 @@ import com.android.systemui.statusbar.NotificationData.Entry;
 import com.android.systemui.statusbar.SignalClusterView;
 import com.android.systemui.statusbar.StatusBarIconView;
 import com.android.systemui.statusbar.policy.BatteryController;
+import com.android.systemui.statusbar.policy.DockBatteryController;
 import com.android.systemui.statusbar.policy.BluetoothController;
 import com.android.systemui.statusbar.policy.DateView;
 import com.android.systemui.statusbar.policy.IntruderAlertView;
@@ -161,8 +162,11 @@ public class PhoneStatusBar extends BaseStatusBar {
     // These are no longer handled by the policy, because we need custom strategies for them
     BluetoothController mBluetoothController;
     BatteryController mBatteryController;
+    DockBatteryController mDockBatteryController;
     LocationController mLocationController;
     NetworkController mNetworkController;
+
+    private boolean mHasDockBattery;
 
     int mNaturalBarHeight = -1;
     int mIconSize = -1;
@@ -603,6 +607,18 @@ public class PhoneStatusBar extends BaseStatusBar {
         mBatteryController = new BatteryController(mContext);
         mBatteryController.addIconView((ImageView)mStatusBarView.findViewById(R.id.battery));
         mBatteryController.addLabelView((TextView)mStatusBarView.findViewById(R.id.battery_text));
+
+        // Dock Battery support
+        mHasDockBattery = mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_hasDockBattery);
+
+        if (mHasDockBattery) {
+            mDockBatteryController = new DockBatteryController(mContext);
+            mDockBatteryController.addIconView((ImageView)mStatusBarView.findViewById(R.id.dock_battery));
+            mDockBatteryController.addLabelView(
+                    (TextView)mStatusBarView.findViewById(R.id.dock_battery_text));
+        }
+
         mNetworkController = new NetworkController(mContext);
         mBluetoothController = new BluetoothController(mContext);
         final SignalClusterView signalCluster =
@@ -1592,6 +1608,11 @@ public class PhoneStatusBar extends BaseStatusBar {
         final boolean halfWayDone = mScrollView.getVisibility() == View.VISIBLE;
         final int zeroOutDelays = halfWayDone ? 0 : 1;
 
+        if (!halfWayDone) {
+            mScrollView.setScaleX(0f);
+            mFlipSettingsView.setScaleX(1f);
+        }
+
         // Only show the Power widget if it should be shown
         mPowerWidget.updateVisibility();
 
@@ -1713,6 +1734,11 @@ public class PhoneStatusBar extends BaseStatusBar {
 
         final boolean halfWayDone = mFlipSettingsView.getVisibility() == View.VISIBLE;
         final int zeroOutDelays = halfWayDone ? 0 : 1;
+
+        if (!halfWayDone) {
+            mFlipSettingsView.setScaleX(0f);
+            mScrollView.setScaleX(1f);
+        }
 
         mFlipSettingsView.setVisibility(View.VISIBLE);
         mFlipSettingsViewAnim = start(
