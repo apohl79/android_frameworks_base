@@ -2236,6 +2236,8 @@ public final class ActivityThread {
                     + ", pkg=" + r.packageInfo.getPackageName()
                     + ", comp=" + r.intent.getComponent().toShortString()
                     + ", dir=" + r.packageInfo.getAppDir());
+			
+            Log.d(TAG, "IONIX: performLaunchActivity: comp=" + r.intent.getComponent().toShortString());
 
             if (activity != null) {
                 Context appContext = createBaseContextForActivity(r, activity);
@@ -2284,6 +2286,17 @@ public final class ActivityThread {
                             " did not call through to super.onPostCreate()");
                     }
                 }
+
+				// Create a broadcast intent for launched components to react on. This used for example to 
+				// deactivate the lockscreen for WhatsApp popups.
+				//
+				// TODO: Add a configuration
+				if (r.intent.getComponent().toShortString().equals("{com.whatsapp/com.whatsapp.Conversation}")) {
+					Log.d(TAG, "IONIX: Sending broadcast intent");
+					Intent i = new Intent("com.ionix.ACTIVITY_LAUNCH_FILTER");
+					i.putExtra("comp", r.intent.getComponent().toShortString());
+					appContext.sendBroadcast(i);
+				}
             }
             r.paused = true;
 
