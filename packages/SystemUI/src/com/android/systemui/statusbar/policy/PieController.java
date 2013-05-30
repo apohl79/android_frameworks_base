@@ -63,6 +63,7 @@ import android.widget.Toast;
 
 import com.android.internal.util.cm.DevUtils;
 import com.android.internal.util.pie.PiePosition;
+import com.android.internal.util.pie.PieServiceConstants;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.BaseStatusBar;
 import com.android.systemui.statusbar.NavigationButtons;
@@ -159,7 +160,6 @@ public class PieController implements BaseStatusBar.NavigationBarCallback, PieVi
                 case MSG_INJECT_KEY_DOWN:
                     inputManager.injectInputEvent((KeyEvent) m.obj,
                             InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
-                    mPieContainer.playSoundEffect(SoundEffectConstants.CLICK);
                     break;
                 case MSG_INJECT_KEY_UP:
                     inputManager.injectInputEvent((KeyEvent) m.obj,
@@ -216,6 +216,8 @@ public class PieController implements BaseStatusBar.NavigationBarCallback, PieVi
             // trigger setupListener()
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.PIE_POSITIONS), false, this);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.PIE_SENSITIVITY), false, this);
         }
 
         @Override
@@ -352,8 +354,17 @@ public class PieController implements BaseStatusBar.NavigationBarCallback, PieVi
 
         mPieTriggerSlots = Settings.System.getInt(resolver,
                 Settings.System.PIE_POSITIONS, PiePosition.BOTTOM.FLAG);
+
+        int sensitivity = Settings.System.getInt(resolver,
+                Settings.System.PIE_SENSITIVITY, 3);
+        if (sensitivity < PieServiceConstants.SENSITIVITY_LOWEST
+                || sensitivity > PieServiceConstants.SENSITIVITY_HIGHEST) {
+            sensitivity = PieServiceConstants.SENSITIVITY_DEFAULT;
+        }
+
         mPieManager.updatePieActivationListener(mPieActivationListener,
-                mPieTriggerSlots & mPieTriggerMask);
+                sensitivity<<PieServiceConstants.SENSITIVITY_SHIFT
+                | mPieTriggerSlots & mPieTriggerMask);
     }
 
     private void setupNavigationItems() {
@@ -577,12 +588,14 @@ public class PieController implements BaseStatusBar.NavigationBarCallback, PieVi
         long when = SystemClock.uptimeMillis();
         ButtonInfo bi = (ButtonInfo) item.tag;
 
+        // play sound effect directly, since detaching the container will prevent to play the sound
+        // at a later time.
+        mPieContainer.playSoundEffect(SoundEffectConstants.CLICK);
         if (bi.keyCode != 0) {
             injectKeyDelayed(bi.keyCode, when);
         } else {
             // provide the same haptic feedback as if a virtual key is pressed
             mPieContainer.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-            mPieContainer.playSoundEffect(SoundEffectConstants.CLICK);
             if (bi == NavigationButtons.RECENT) {
                 if (mStatusBar != null) {
                     mStatusBar.toggleRecentApps();
