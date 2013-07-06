@@ -38,8 +38,11 @@ import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Looper;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -141,7 +144,6 @@ public class KeyguardHostView extends KeyguardViewBase {
         mAppWidgetHost = new AppWidgetHost(
                 context, APPWIDGET_HOST_ID, mOnClickHandler, Looper.myLooper());
         mAppWidgetHost.setUserId(mUserId);
-        cleanupAppWidgetIds();
 
         mAppWidgetManager = AppWidgetManager.getInstance(mContext);
         mSecurityModel = new KeyguardSecurityModel(context);
@@ -155,6 +157,7 @@ public class KeyguardHostView extends KeyguardViewBase {
             mCameraDisabled = dpm.getCameraDisabled(null);
         }
 
+        cleanupAppWidgetIds();
         mSafeModeEnabled = LockPatternUtils.isSafeModeEnabled();
         mUserSetupCompleted = Settings.Secure.getIntForUser(mContext.getContentResolver(),
                 Settings.Secure.USER_SETUP_COMPLETE, 0, UserHandle.USER_CURRENT) != 0;
@@ -184,9 +187,22 @@ public class KeyguardHostView extends KeyguardViewBase {
         // that are triggered by deleteAppWidgetId, which is why we're doing this
         int[] appWidgetIdsInKeyguardSettings = mLockPatternUtils.getAppWidgets();
         int[] appWidgetIdsBoundToHost = mAppWidgetHost.getAppWidgetIds();
+        int fallbackWidgetId = mLockPatternUtils.getFallbackAppWidgetId();
         for (int i = 0; i < appWidgetIdsBoundToHost.length; i++) {
             int appWidgetId = appWidgetIdsBoundToHost[i];
             if (!contains(appWidgetIdsInKeyguardSettings, appWidgetId)) {
+                if (appWidgetId == fallbackWidgetId) {
+                    if (widgetsDisabledByDpm()) {
+                        // Ignore attempts to delete the fallback widget when widgets
+                        // are disabled
+                        continue;
+                    } else {
+                        // Reset fallback widget id in the event that widgets have been
+                        // enabled, and fallback widget is being deleted
+                        mLockPatternUtils.writeFallbackAppWidgetId(
+                                AppWidgetManager.INVALID_APPWIDGET_ID);
+                    }
+                }
                 Log.d(TAG, "Found a appWidgetId that's not being used by keyguard, deleting id "
                         + appWidgetId);
                 mAppWidgetHost.deleteAppWidgetId(appWidgetId);
@@ -325,9 +341,10 @@ public class KeyguardHostView extends KeyguardViewBase {
             return;
         }
 
+        Drawable back = null;
         if (!background.isEmpty()) {
             try {
-                setBackgroundColor(Integer.parseInt(background));
+                back = new ColorDrawable(Integer.parseInt(background));
             } catch(NumberFormatException e) {
                 Log.e(TAG, "Invalid background color " + background);
             }
@@ -336,10 +353,14 @@ public class KeyguardHostView extends KeyguardViewBase {
                 Context settingsContext = getContext().createPackageContext("com.android.settings", 0);
                 String wallpaperFile = settingsContext.getFilesDir() + "/lockwallpaper";
                 Bitmap backgroundBitmap = BitmapFactory.decodeFile(wallpaperFile);
-                setBackgroundDrawable(new BitmapDrawable(backgroundBitmap));
+                back = new BitmapDrawable(getContext().getResources(), backgroundBitmap);
             } catch (NameNotFoundException e) {
-            // Do nothing here
+                // Do nothing here
             }
+        }
+        if (back != null) {
+            back.setColorFilter(BACKGROUND_COLOR, PorterDuff.Mode.SRC_ATOP);
+            setBackground(back);
         }
     }
 
@@ -439,7 +460,8 @@ public class KeyguardHostView extends KeyguardViewBase {
             if (deletePermanently) {
                 final int appWidgetId = ((KeyguardWidgetFrame) v).getContentAppWidgetId();
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID &&
-                        appWidgetId != LockPatternUtils.ID_DEFAULT_STATUS_WIDGET) {
+                        appWidgetId != LockPatternUtils.ID_DEFAULT_STATUS_WIDGET &&
+                        appWidgetId != mLockPatternUtils.getFallbackAppWidgetId()) {
                     mAppWidgetHost.deleteAppWidgetId(appWidgetId);
                 }
             }
